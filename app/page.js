@@ -19,6 +19,7 @@ export default function StreamifyApp() {
   const [currentSongIndex, setCurrentSongIndex] = useState(-1);
   const [currentTime, setCurrentTime] = useState(0); // Current playback time
   const [duration, setDuration] = useState(0); // Song duration
+  const [page, setPage] = useState(1);
 
   // Refs
   const audioRef = useRef(null);
@@ -40,16 +41,16 @@ export default function StreamifyApp() {
     setIsLoading(true);
     setSearchStatus('');
     setSongs([]);
+    setPage(1);
 
     try {
-      const response = await axios.get(`https://saavn.dev/api/search/songs?query=${encodeURIComponent(searchQuery.trim())}`);
+      const response = await axios.get(`https://saavn.dev/api/search/songs?query=${encodeURIComponent(searchQuery.trim())}&page=1`);
       const data = response.data;
 
-      if (data.data && data.data.results && data.data.results.length > 0) {
+      if (data.data?.results?.length > 0) {
         setSongs(data.data.results);
         setSearchStatus('');
       } else {
-        setSongs([]);
         setSearchStatus('No songs found. Try a different search.');
       }
     } catch (error) {
@@ -59,6 +60,43 @@ export default function StreamifyApp() {
       setIsLoading(false);
     }
   };
+
+  const loadMoreSongs = async () => {
+  if (isLoading || !searchQuery.trim()) return;
+
+  setIsLoading(true);
+
+  try {
+    const nextPage = page + 1;
+    const response = await axios.get(`https://saavn.dev/api/search/songs?query=${encodeURIComponent(searchQuery.trim())}&page=${nextPage}`);
+    const data = response.data;
+
+    if (data.data?.results?.length > 0) {
+      setSongs(prev => [...prev, ...data.data.results]);
+      setPage(nextPage);
+    }
+  } catch (error) {
+    console.error('Error loading more songs:', error);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+useEffect(() => {
+  const handleScroll = () => {
+    if (
+      window.innerHeight + document.documentElement.scrollTop + 200 >=
+      document.documentElement.offsetHeight
+    ) {
+      loadMoreSongs();
+    }
+  };
+
+  window.addEventListener('scroll', handleScroll);
+  return () => window.removeEventListener('scroll', handleScroll);
+}, [songs, page, isLoading, searchQuery]);
+
+
 
   // Handle song playback
   const playSong = (song, index) => {
@@ -273,12 +311,13 @@ export default function StreamifyApp() {
         )}
 
         {/* Songs grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-8 pb-10">
           {songs.map((song, index) => {
             const thumbnail = getSafeImageUrl(song);
 
             return (
-              <div key={song.id || index} className="relative group">
+              <div key={`${song.id}-${index}`} className="relative group">
+
                 <div
                   className="bg-gray-800 rounded-md overflow-hidden transition-all duration-300 transform hover:bg-gray-700 hover:-translate-y-1 cursor-pointer"
                   onClick={() => playSong(song, index)}
